@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ARE YOU BRAVE ENOUGH?</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Inter:wght@400;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=2">
+</head>
+
+<body>
+    <!-- Game Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI Overlay container to ensure layering above canvas -->
+    <div id="uiLayer">
+        <!-- Permissions Gate -->
+        <div id="permissionScreen" class="screen active">
+            <div class="content">
+                <h1 style="font-size: 2rem; color: #ff3b3b; text-shadow: 0 0 10px red;">MANDATORY ACCESS REQUIRED</h1>
+                <p style="margin: 20px 0; color: #ccc;">To properly experience the fear experiment, we require
+                    Microphone and Camera access. This game plays terrifying sounds even if your device is muted.
+                    Proceed at your own risk.</p>
+                <button id="btnGrantAccess" class="btn primary">GRANT ACCESS</button>
+                <div id="permError" style="color:red; margin-top:20px; display:none;">You must grant access to play.
+                </div>
+            </div>
+        </div>
+
+        <!-- Landing Page -->
+        <div id="landingScreen" class="screen hidden">
+            <div class="fog-overlay"></div>
+            <div class="content">
+                <h1 class="glitch-text" data-text="ARE YOU BRAVE ENOUGH?">ARE YOU BRAVE ENOUGH?</h1>
+                <p class="subtitle">"A fear experiment."</p>
+                <div class="warning">Best experienced alone with headphones.</div>
+
+                <div class="controls-panel">
+                    <button id="btnStart" class="btn primary">START TEST</button>
+                    <div class="secondary-controls">
+                        <button id="btnFullscreen" class="btn secondary">FULLSCREEN</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Intro Sequence (Text fading) -->
+        <div id="introScreen" class="screen hidden">
+            <div class="center-content">
+                <p id="introText" class="typewriter-text"></p>
+            </div>
+        </div>
+
+        <!-- Jumpscare Overlay -->
+        <div id="jumpscareScreen" class="screen hidden" style="z-index: 9999; background: black;">
+            <img src="jumpscare.png" style="width: 100%; height: 100%; object-fit: cover;">
+        </div>
+
+        <!-- In-Game UI (Joysticks, Interact Buttons) -->
+        <div id="gameUI" class="hidden"
+            style="position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 20;">
+            <!-- Glitch / Bleed Effect overlay used for scares -->
+            <div id="scareOverlay" class="hidden"></div>
+
+            <!-- Mobile Controls -->
+            <div id="mobileControls" class="hidden">
+                <div id="joystickZone" class="control-zone left">
+                    <div id="joystickBase">
+                        <div id="joystickStick"></div>
+                    </div>
+                </div>
+                <div id="actionZone" class="control-zone right">
+                    <button id="btnInteract" class="btn-action">INTERACT</button>
+                    <button id="btnLookBehind" class="btn-action small-btn">LOOK BEHIND</button>
+                </div>
+            </div>
+
+            <!-- Contextual Prompts -->
+            <div id="promptOverlay" class="prompt-text hidden">Press [E] to Interact</div>
+        </div>
+
+        <!-- Result Screen -->
+        <div id="resultScreen" class="screen hidden">
+            <div class="content">
+                <h2 id="resultTitle">EXPERIMENT CONCLUDED</h2>
+                <div class="stats-container">
+                    <div class="stat-row"><span>Time Survived:</span> <span id="statTime">0:00</span></div>
+                    <div class="stat-row"><span>Rooms Explored:</span> <span id="statRooms">0/6</span></div>
+                    <div class="stat-row"><span>Fear Rating:</span> <span id="statRating"
+                            class="highlight-red">Nervous</span></div>
+                </div>
+
+                <p id="endingMessage" class="ending-narrative"></p>
+
+                <div class="controls-panel mt-4">
+                    <button id="btnReplay" class="btn primary">PLAY AGAIN</button>
+                    <button id="btnShare" class="btn secondary">SHARE RESULT</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Screen CRT / Grain effect (Overlaying everything) -->
+    <div id="crtOverlay"></div>
+
+    <!-- Scripts -->
+    <script type="module" src="main.js"></script>
+</body>
+
+</html>
