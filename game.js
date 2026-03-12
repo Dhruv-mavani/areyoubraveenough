@@ -5,74 +5,148 @@ import { Player } from './player.js';
 import { AudioSys } from './audio.js';
 import { EventsSys } from './events.js';
 import { HackingEffects } from './hackingEffects.js';
+import { Ghoul } from './ghoul.js';
+import { Fragments } from './fragments.js';
 import * as THREE from 'three';
 
 export const Game = {
     state: 'menu',
+    level: 1,
+    survivalTimer: 0,
+    survivalGoal: 60, // seconds
+    hasLifeline: false,
     lastTime: 0,
     startTime: 0,
-    timeSurvived: 0,
-    keyEntity: null,
+    timeSurvivedTotal: 0,
+    micVolume: 0,
 
-    start: function () {
+    saveProgress: function () {
+        localStorage.setItem('areyoubrave_level', this.level);
+    },
+
+    loadProgress: function () {
+        const saved = localStorage.getItem('areyoubrave_level');
+        return saved ? parseInt(saved) : 1;
+    },
+
+    start: async function (startingLevel = 1) {
+        console.log("GAME: Starting initialization...");
+        InputSys.suppressInstructions = false;
         try {
             Engine3D.init();
-            World3D.init();
+
+            // Phase 2.0 Textures - with timeout and error protection
+            console.log("GAME: Preloading textures...");
+            const texPromise = Promise.all([
+                Engine3D.loadTexture('floor', './assets/tex_wood_floor_1773142823871.png'),
+                Engine3D.loadTexture('wall', './assets/tex_dirty_wall_1773142848053.png'),
+                Engine3D.loadTexture('concrete', './assets/tex_concrete_1773142870684.png')
+            ]);
+
+            await Promise.race([
+                texPromise,
+                new Promise(resolve => setTimeout(() => {
+                    console.warn("GAME: Texture preloading timed out, proceeding anyway.");
+                    resolve();
+                }, 5000))
+            ]);
+
+            World3D.init(1);
             InputSys.init();
             HackingEffects.init();
 
-            // Spawn player in bedroom (center instead of wall corner)
-            Player.init(300, 510);
+            this.initLevel(startingLevel);
 
-            EventsSys.reset();
+            console.log("GAME: Initializing audio...");
+            await AudioSys.init();
+            AudioSys.startAmbient();
+            AudioSys.startHeartbeatLoop(1500);
 
-            // Spawn Key randomly (In 3D we'll represent it with a rotating box)
-            const options = [
-                { x: 880, z: 500 }, // bathroom
-                { x: 590, z: 300 }, // storage
-                { x: 310, z: 780 }  // basement
-            ];
-            const loc = options[Math.floor(Math.random() * options.length)];
-
-            const keyGeo = new THREE.BoxGeometry(10, 10, 10);
-            const keyMat = new THREE.MeshLambertMaterial({ color: 0xffff00 });
-            this.keyMesh = new THREE.Mesh(keyGeo, keyMat);
-            this.keyMesh.position.set(loc.x, 30, loc.z);
-            Engine3D.scene.add(this.keyMesh);
-            this.keyEntity = loc;
+            this.setupMicrophoneListener();
 
             this.startTime = Date.now();
             this.state = 'play';
             this.lastTime = performance.now();
 
-            // Set up audio
-            AudioSys.init();
-            AudioSys.startAmbient();
-            AudioSys.startHeartbeatLoop(1500);
-
-            // Set up Microphone listener for "Microphone Monster"
-            this.setupMicrophoneListener();
-
-            // Setup initial interaction listener
             Engine3D.renderer.setAnimationLoop(() => this.loop());
 
-            // Auto lock pointer when clicking in game
             document.addEventListener('click', () => {
                 if (this.state === 'play') {
-                    InputSys.lock();
+                    try {
+                        InputSys.lock();
+                    } catch (e) {
+                        console.warn("Pointer lock failed on click:", e);
+                    }
                 }
             });
-            InputSys.lock(); // Try immediate lock
+
+            try {
+                InputSys.lock();
+            } catch (e) {
+                console.warn("Pointer lock failed on start:", e);
+            }
+            console.log("GAME: Initialization complete.");
 
         } catch (e) {
-            console.error(e.stack || e);
+            console.error("GAME START CRITICAL ERROR:", e.stack || e);
         }
     },
+
+    initLevel: function (num) {
+        this.level = num;
+        this.saveProgress();
+        this.survivalTimer = 0;
+        this.survivalGoal = 60 + (num - 1) * 60; // 1 min, 2 min, 3 min...
+        this.hasLifeline = false;
+
+        Fragments.reset();
+
+        // Dynamic World Scaling
+        World3D.init(num);
+        Ghoul.init();
+
+        Player.init(100, 100);
+
+        // Ghoul gets more aggressive: base speed starts at ~93% of player (800)
+        Ghoul.baseSpeed = 750 + (num * 20);
+
+        // Spawn Ghoul much further away to prevent instant death given high speed
+        if (num === 1) {
+            Ghoul.pos.set(1200, 0, 0); // Further down the hallway
+        } else {
+            // Distance increased to 1500 to ensure visibility/chase in Level 2 fog
+            Ghoul.pos.set(1500, 0, 0);
+        }
+
+        // Reset Ghoul state and speed
+        Ghoul.state = 'wander';
+        Ghoul.speed = Ghoul.baseSpeed;
+
+        // Reset mesh position immediately
+        if (Ghoul.mesh) Ghoul.mesh.position.set(Ghoul.pos.x, 55, Ghoul.pos.z);
+
+        // Reset fragment state (don't carry over)
+        this.hasLifeline = false;
+        Fragments.reset();
+
+        // Spawn exactly one fragment per level
+        Fragments.spawnRandom(1);
+
+        // Add a larger "peace" window at start for fast ghouls
+        this.peaceWindow = 5.0;
+
+        HackingEffects.triggerFakeNotification(
+            `LEVEL ${num}`,
+            `SURVIVE FOR ${this.survivalGoal / 60} MINUTE(S).`
+        );
+    },
+
 
     setupMicrophoneListener: async function () {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const audioCtx = AudioSys.ctx || new AudioContext();
+            const audioCtx = AudioSys.ctx || new (window.AudioContext || window.webkitAudioContext)();
+            if (!AudioSys.ctx) AudioSys.ctx = audioCtx; // Share the context
             const source = audioCtx.createMediaStreamSource(stream);
             const analyser = audioCtx.createAnalyser();
             analyser.fftSize = 256;
@@ -80,59 +154,30 @@ export const Game = {
 
             this.micAnalyser = analyser;
             this.micDataArray = new Uint8Array(analyser.frequencyBinCount);
-            console.log("Mic initialized for ragebait detection...");
-
-            // Speech Recognition (Ragebait)
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (SpeechRecognition) {
-                this.recognition = new SpeechRecognition();
-                this.recognition.continuous = true;
-                this.recognition.interimResults = false;
-
-                this.recognition.onresult = (event) => {
-                    const transcript = event.results[event.results.length - 1][0].transcript.trim();
-                    if (transcript.length > 2) {
-                        window.lastHeardPhrase = transcript; // Store globally for events.js to use
-
-                        // Small chance to immediately acknowledge their speech
-                        if (Math.random() < 0.25 && this.state === 'play') {
-                            HackingEffects.triggerFakeNotification("Unknown Listener", `I heard you say: "${transcript}"`);
-                        }
-                    }
-                };
-
-                this.recognition.onend = () => {
-                    // Try to restart if it stops
-                    if (this.state === 'play') {
-                        try { this.recognition.start(); } catch (e) { }
-                    }
-                };
-
-                try { this.recognition.start(); } catch (e) { }
-            }
+            console.log("Mic initialized for tracking...");
 
         } catch (err) {
-            console.warn("No mic access for Ragebait features.");
+            console.warn("No mic access for Ghost tracking.");
         }
     },
 
     loop: function () {
         try {
             if (this.state !== 'play') return;
-
             const dt = Engine3D.clock.getDelta();
+
+            if (this.micAnalyser) {
+                this.micAnalyser.getByteFrequencyData(this.micDataArray);
+                let sum = 0;
+                for (let i = 0; i < this.micDataArray.length; i++) sum += this.micDataArray[i];
+                this.micVolume = sum / this.micDataArray.length;
+            }
 
             this.update(dt);
             Engine3D.render();
-
-            if (this.keyMesh && this.keyEntity) {
-                this.keyMesh.rotation.x += dt;
-                this.keyMesh.rotation.y += dt;
-            }
-
         } catch (e) {
             console.error(e.stack || e);
-            Engine3D.renderer.setAnimationLoop(null); // stop loop on error to prevent cascading logs
+            Engine3D.renderer.setAnimationLoop(null);
         }
     },
 
@@ -140,110 +185,157 @@ export const Game = {
         const pPos = Player.update(dt);
         if (!pPos) return;
 
-        // (Microphone Death Feature removed per user request)
-
-
-        // Room checking logic
-        let currentRoom = null;
-        World3D.rooms.forEach(r => {
-            if (pPos.x >= r.x && pPos.x <= r.x + r.w && pPos.z >= r.z && pPos.z <= r.z + r.d) {
-                currentRoom = r;
-            }
-        });
-
-        if (currentRoom) {
-            EventsSys.checkRoomTrigger(currentRoom.id);
+        // Survival Timer
+        this.survivalTimer += dt;
+        let killed = false;
+        if (this.peaceWindow <= 0) {
+            // Check if player is moving/running based on velocity
+            const isRunning = (InputSys.velocity.x * InputSys.velocity.x + InputSys.velocity.z * InputSys.velocity.z) > 10000;
+            killed = Ghoul.update(dt, pPos, this.micVolume, isRunning);
+        } else {
+            // Static position update without AI processing/movement
+            if (Ghoul.mesh) Ghoul.mesh.position.set(Ghoul.pos.x, 55, Ghoul.pos.z);
+            this.peaceWindow -= dt;
         }
-
-        // Check Interactions
-        const prompt = document.getElementById('promptOverlay');
-        let canInteract = false;
-
-        // Key Interaction
-        if (this.keyEntity) {
-            const dist = Math.hypot(pPos.x - this.keyEntity.x, pPos.z - this.keyEntity.z);
-            if (dist < 40) {
-                prompt.innerText = "Press [E] to Pick Up Object";
-                prompt.classList.remove('hidden');
-                canInteract = true;
-
-                if (InputSys.interactPressed) {
-                    Player.hasKey = true;
-                    Engine3D.scene.remove(this.keyMesh);
-                    this.keyEntity = null; // consume
-                    AudioSys.playPickup();
-                    prompt.classList.add('hidden');
-                    InputSys.interactPressed = false;
-                    HackingEffects.triggerFakeNotification("Unknown Error", "Object picked up. Why did you do that?");
-                }
+        if (killed) {
+            if (this.hasLifeline) {
+                this.consumeLifeline(pPos);
+            } else {
+                this.endGame(false, "The Stalker stole your face.");
+                return;
             }
         }
 
-        // Exit Door Interaction
-        const dPos = World3D.exitDoorMesh.position;
-        if (pPos.x > dPos.x - 40 && pPos.x < dPos.x + 40 && pPos.z > dPos.z - 40 && pPos.z < dPos.z + 40) {
-            prompt.innerText = Player.hasKey ? "Press [E] to Escape" : "Locked. Find the key.";
-            prompt.classList.remove('hidden');
-            canInteract = true;
-
-            if (InputSys.interactPressed && Player.hasKey) {
-                this.endGame(true);
+        const collected = Fragments.update(dt, pPos);
+        if (collected) {
+            AudioSys.playPickup();
+            if (!this.hasLifeline) {
+                this.hasLifeline = true;
+                HackingEffects.triggerFakeNotification("SOUL FRAGMENT", "LIFELINE ACQUIRED. You have one more chance.");
             }
         }
 
-        if (!canInteract && !prompt.classList.contains('hidden')) {
-            prompt.classList.add('hidden');
+        this.timeSurvivedTotal = Math.floor((Date.now() - this.startTime) / 1000);
+
+        // Random Scares periodically
+        if (Math.random() < 0.002) { // Significantly reduced frequency
+            AudioSys.playScareSound('random');
         }
 
-        this.timeSurvived = Math.floor((Date.now() - this.startTime) / 1000);
+        // Phantom Footsteps (sounds like someone is behind you)
+        if (Math.random() < 0.0005) { // Significantly reduced frequency
+            AudioSys.playPhantomFootsteps();
+        }
+
+        // Stats Bar Update
+        const fragmentHUD = document.getElementById('fragmentCount');
+        const timerHUD = document.getElementById('levelTimer');
+        const levelHUD = document.getElementById('gameLevel');
+        const statsBar = document.getElementById('statsBar');
+
+        if (fragmentHUD) fragmentHUD.innerText = Fragments.collectedCount;
+        if (levelHUD) levelHUD.innerText = this.level;
+        if (timerHUD) {
+            const min = Math.floor(this.survivalTimer / 60);
+            const sec = Math.floor(this.survivalTimer % 60);
+            timerHUD.innerText = `${min}:${sec < 10 ? '0' : ''}${sec}`;
+        }
+        if (statsBar) statsBar.classList.remove('hidden');
+
+        // Boundary Protection: If player escapes walls somehow, teleport back to hub
+        const bounds = World3D.getMapBounds ? World3D.getMapBounds() : null;
+        if (bounds) {
+            if (pPos.x < bounds.minX - 50 || pPos.x > bounds.maxX + 50 ||
+                pPos.z < bounds.minZ - 50 || pPos.z > bounds.maxZ + 50) {
+                console.warn("GAME: Player escaped boundaries! Resetting to hub...");
+                Player.init(100, 100);
+            }
+        }
     },
 
+    consumeLifeline: function (pPos) {
+        this.hasLifeline = false;
+        AudioSys.playJumpscare(); // Brief scare sound
+        HackingEffects.triggerFakeNotification("CLOSE CALL", "LIFELINE CONSUMED. The darkness retreats... for now.");
 
+        // Teleport Ghoul away for a breather
+        Ghoul.pos.set(pPos.x + 500, 0, pPos.z + 500);
+    },
 
-    endGame: function (escaped, deathMessage = "The darkness consumed you.") {
-        this.state = 'end';
+    endGame: async function (escaped, deathMessage = "The darkness consumed you.") {
+        InputSys.suppressInstructions = true;
         InputSys.unlock();
+
+        // Explicitly hide instructions just in case
+        const instructions = document.getElementById('engine-instructions');
+        if (instructions) instructions.classList.add('hidden');
+
+        this.state = 'end';
         AudioSys.stopAmbient();
         AudioSys.stopHeartbeatLoop();
 
+        if (!escaped) {
+            // SUDDEN DEATH JUMPSCARE
+            const js = document.getElementById('jumpscareScreen');
+            js.classList.remove('hidden');
+            js.classList.add('active');
+            AudioSys.playJumpscare();
+            await new Promise(r => setTimeout(r, 1200));
+            js.classList.remove('active');
+            js.classList.add('hidden');
+        }
+
         const resultScreen = document.getElementById('resultScreen');
         const gameUI = document.getElementById('gameUI');
-        const endingMsg = document.getElementById('endingMessage');
-        const statTime = document.getElementById('statTime');
-        const statRooms = document.getElementById('statRooms');
-        const statRating = document.getElementById('statRating');
+        const statsBar = document.getElementById('statsBar');
+        const uiLayer = document.getElementById('uiLayer');
+
+        console.log("GAME: Conclusion Sequence Started.");
+
+        // Disable game UI
+        gameUI.classList.add('hidden');
+        statsBar.classList.add('hidden');
+
+        // FORCE UI LAYER ACTIVE FOR CURSOR
+        if (uiLayer) {
+            uiLayer.classList.remove('hidden');
+            uiLayer.classList.add('active');
+            uiLayer.style.pointerEvents = "auto";
+        }
+
+        // Show result screen
+        resultScreen.classList.remove('hidden');
+        resultScreen.classList.add('active');
+        resultScreen.style.zIndex = "1000";
+        resultScreen.style.pointerEvents = "auto";
+
+        InputSys.unlock();
+        // Fallback unlock to be sure
+        setTimeout(() => InputSys.unlock(), 500);
 
         gameUI.classList.add('hidden');
         resultScreen.classList.remove('hidden');
         resultScreen.classList.add('active');
 
-        // Populate stats
-        const minutes = Math.floor(this.timeSurvived / 60);
-        const seconds = this.timeSurvived % 60;
-        statTime.innerText = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+        const statTime = document.getElementById('statTime');
+        const statRooms = document.getElementById('statRooms');
+        const statRating = document.getElementById('statRating');
+        const endingMessage = document.getElementById('endingMessage');
 
-        const roomsExplored = EventsSys.visitedRooms.size;
-        statRooms.innerText = `${roomsExplored}/6`;
+        const minutes = Math.floor(this.timeSurvivedTotal / 60);
+        const seconds = this.timeSurvivedTotal % 60;
+        if (statTime) statTime.innerText = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 
-        // Calculate Fear Rating based on time vs explored
-        if (this.timeSurvived < 60) statRating.innerText = "Fearless";
-        else if (this.timeSurvived < 120) statRating.innerText = "Brave";
-        else if (roomsExplored < 3) statRating.innerText = "Nervous";
-        else statRating.innerText = "Paranoid";
+        if (statRooms) statRooms.innerText = `LEVEL ${this.level}`;
+        if (statRating) statRating.innerText = escaped ? "SURVIVOR" : "LOST";
 
-        // Ending narrative
-        if (escaped) {
-            AudioSys.createNoiseBurst(3.0, 0.5, -200); // heavy rumble
-            endingMsg.innerText = "You escaped... But something followed you.";
-            document.title = "YOU ESCAPED";
-        } else {
-            endingMsg.innerText = deathMessage;
+        if (endingMessage) {
+            if (escaped) {
+                endingMessage.innerText = "You escaped... But are you still you?";
+            } else {
+                endingMessage.innerText = deathMessage;
+            }
+            endingMessage.style.opacity = 1;
         }
-
-        endingMsg.style.opacity = 1;
-
-        // Save high score locally
-        const bestTime = localStorage.getItem('AYBE_bestTime') || Infinity;
-        if (this.timeSurvived < bestTime) localStorage.setItem('AYBE_bestTime', this.timeSurvived);
     }
 };

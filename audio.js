@@ -10,7 +10,7 @@ export const AudioSys = {
     audioBuffers: {},
 
     init: function () {
-        if (!this.enabled) return;
+        if (!this.enabled || this.ctx) return;
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             this.ctx = new AudioContext();
@@ -19,11 +19,24 @@ export const AudioSys = {
             }
 
             // Load user-provided scary sounds
-            this.loadSound('scream', 'scarysounds/ghost-screaming.mp3');
-            this.loadSound('creature', 'scarysounds/creepy-little-creature.mp3');
-            this.loadSound('iseeyou', 'scarysounds/iSeeYou.mp3');
-            this.loadSound('ambience', 'scarysounds/backgroundambience.mp3');
-            this.loadSound('gasp', 'scarysounds/surprise-gasp-female.mp3');
+            const soundPromises = [
+                this.loadSound('scream', 'scarysounds/ghost-screaming.mp3'),
+                this.loadSound('creature', 'scarysounds/creepy-little-creature.mp3'),
+                this.loadSound('iseeyou', 'scarysounds/iSeeYou.mp3'),
+                this.loadSound('ambience', 'scarysounds/backgroundambience.mp3'),
+                this.loadSound('gasp', 'scarysounds/surprise-gasp-female.mp3'),
+                this.loadSound('creak', 'scarysounds/floorcreak.mp3'),
+                this.loadSound('breathing', 'scarysounds/ghostbreathing.mp3'),
+                this.loadSound('teeth', 'scarysounds/ghostteethvibratingsound.mp3'),
+                this.loadSound('footsteps', 'scarysounds/scaryfootsteps.mp3'),
+                this.loadSound('growl', 'scarysounds/soft-evil-growl.mp3')
+            ];
+
+            // return a promise that resolves when sounds are loaded (or timeout)
+            return Promise.race([
+                Promise.all(soundPromises),
+                new Promise(resolve => setTimeout(resolve, 3000)) // 3s max wait for sounds
+            ]);
 
         } catch (e) {
             console.error("Web Audio API not supported", e);
@@ -34,17 +47,27 @@ export const AudioSys = {
     loadSound: async function (name, url) {
         if (!this.ctx) return;
         try {
+            console.log(`AUDIO: Loading ${name} from ${url}...`);
             const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`HTTP error! status: ${resp.status}`);
             const arrayBuffer = await resp.arrayBuffer();
             const decoded = await this.ctx.decodeAudioData(arrayBuffer);
             this.audioBuffers[name] = decoded;
+            console.log(`AUDIO: ${name} loaded successfully.`);
         } catch (e) {
-            console.error("Failed loading sound:", name, e);
+            console.error("AUDIO: Failed loading sound:", name, e);
         }
     },
 
     playSoundBuffer: function (name, volume = 1.0) {
-        if (!this.ctx || !this.enabled || !this.audioBuffers[name]) return;
+        if (!this.ctx || !this.enabled) {
+            console.warn(`AUDIO: Cannot play ${name}, system not ready.`);
+            return;
+        }
+        if (!this.audioBuffers[name]) {
+            console.warn(`AUDIO: Buffer for ${name} not found.`);
+            return;
+        }
         this.resume();
 
         const source = this.ctx.createBufferSource();
@@ -176,7 +199,40 @@ export const AudioSys = {
             } else {
                 this.createNoiseBurst(0.7, 0.6, -150);
             }
+        } else if (type === 'random') {
+            const pool = ['iseeyou', 'growl', 'creature', 'creak', 'gasp'];
+            const choice = pool[Math.floor(Math.random() * pool.length)];
+            const vol = choice === 'iseeyou' ? 4.0 : 2.0;
+            this.playSoundBuffer(choice, vol);
         }
+    },
+
+    playGhoulSounds: function (distance) {
+        if (!this.ctx || !this.enabled) return;
+
+        if (distance < 100) {
+            this.playSoundBuffer('teeth', 1.2);
+        } else if (distance < 500) {
+            this.playSoundBuffer('breathing', 1.0);
+        }
+    },
+
+    playFootsteps: function (volume = 0.5) {
+        if (this._lastFootstep && Date.now() - this._lastFootstep < 400) return;
+        this._lastFootstep = Date.now();
+        this.playSoundBuffer('footsteps', volume);
+    },
+
+    playPhantomFootsteps: function () {
+        if (!this.ctx || !this.enabled) return;
+
+        let steps = 3 + Math.floor(Math.random() * 4);
+        let count = 0;
+        const interval = setInterval(() => {
+            this.playSoundBuffer('footsteps', 0.2);
+            count++;
+            if (count >= steps) clearInterval(interval);
+        }, 500);
     },
 
     createNoiseBurst: function (duration, volume, detune) {

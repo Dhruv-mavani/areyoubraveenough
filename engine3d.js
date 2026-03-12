@@ -15,17 +15,24 @@ export const Engine3D = {
 
         // Scene Setup
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x0a0a0a);
-        this.scene.fog = new THREE.FogExp2(0x0a0a0a, 0.012);
+        this.scene.background = new THREE.Color(0x050505);
+        this.scene.fog = new THREE.FogExp2(0x050505, 0.007);
+
+        this.textureLoader = new THREE.TextureLoader();
+        this.textures = {};
 
         // Camera
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         this.camera.position.set(0, 50, 0); // Average eye height
 
         // Renderer
-        this.renderer = new THREE.WebGLRenderer({ antialias: false }); // low-poly style
+        this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // limit pixel ratio for performance/retro look
+        this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.toneMapping = THREE.ReinhardToneMapping;
+        this.renderer.toneMappingExposure = 1.0;
 
         // Ensure absolute positioning
         this.renderer.domElement.style.position = 'absolute';
@@ -40,11 +47,18 @@ export const Engine3D = {
         container.appendChild(this.renderer.domElement);
 
         // Lighting
-        const ambientLight = new THREE.AmbientLight(0x222222);
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2); // Increased intensity
         this.scene.add(ambientLight);
 
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.0); // Better overall scene visibility
+        this.scene.add(hemiLight);
+
         // Flashlight attached to camera
-        this.flashlight = new THREE.SpotLight(0xffffff, 50, 400, Math.PI / 4, 0.5, 1);
+        this.flashlight = new THREE.SpotLight(0xfff5ee, 50, 600, Math.PI / 4, 0.3, 1);
+        this.flashlight.castShadow = true;
+        this.flashlight.shadow.mapSize.width = 1024;
+        this.flashlight.shadow.mapSize.height = 1024;
         this.flashlight.position.set(0, 0, 0);
         this.flashlight.target.position.set(0, 0, -1);
         this.camera.add(this.flashlight);
@@ -68,5 +82,22 @@ export const Engine3D = {
     render: function () {
         if (!this.initialized) return;
         this.renderer.render(this.scene, this.camera);
+    },
+
+    loadTexture: function (name, url) {
+        return new Promise((resolve, reject) => {
+            this.textureLoader.load(url,
+                (tex) => {
+                    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+                    this.textures[name] = tex;
+                    resolve(tex);
+                },
+                undefined,
+                (err) => {
+                    console.error(`Failed to load texture: ${url}`, err);
+                    resolve(null); // Resolve with null instead of hanging
+                }
+            );
+        });
     }
 };

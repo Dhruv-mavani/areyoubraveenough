@@ -5,88 +5,73 @@ import * as THREE from 'three';
 export const InputSys = {
     keys: {},
     controls: null,
-    moveForward: false,
-    moveBackward: false,
-    moveLeft: false,
     moveRight: false,
     interactPressed: false,
+    jumpPressed: false,
     velocity: new THREE.Vector3(),
     direction: new THREE.Vector3(),
+    suppressInstructions: false,
 
     init: function () {
         this.controls = new PointerLockControls(Engine3D.camera, document.body);
 
-        const instructions = document.getElementById('engine-instructions'); // We'll need to create this
+        const instructions = document.getElementById('engine-instructions');
 
-        this.controls.addEventListener('lock', function () {
-            if (instructions) instructions.style.display = 'none';
+        this.controls.addEventListener('lock', () => {
+            this.suppressInstructions = false;
+            if (instructions) {
+                instructions.classList.add('hidden');
+            }
         });
 
-        this.controls.addEventListener('unlock', function () {
-            if (instructions) instructions.style.display = 'block';
+        this.controls.addEventListener('unlock', () => {
+            if (this.suppressInstructions) return;
+            if (instructions) {
+                instructions.classList.remove('hidden');
+            }
         });
+
+        // Click on instructions to relock
+        if (instructions) {
+            instructions.addEventListener('click', () => {
+                if (!this.suppressInstructions) this.lock();
+            });
+        }
 
         Engine3D.scene.add(Engine3D.camera);
 
         const onKeyDown = (event) => {
-            switch (event.code) {
-                case 'ArrowUp':
-                case 'KeyW':
-                    this.moveForward = true;
-                    break;
-                case 'ArrowLeft':
-                case 'KeyA':
-                    this.moveLeft = true;
-                    break;
-                case 'ArrowDown':
-                case 'KeyS':
-                    this.moveBackward = true;
-                    break;
-                case 'ArrowRight':
-                case 'KeyD':
-                    this.moveRight = true;
-                    break;
-                case 'KeyE':
-                    this.interactPressed = true;
-                    break;
-            }
+            console.log("KeyDown:", event.code);
+            this.keys[event.code] = true;
         };
 
         const onKeyUp = (event) => {
-            switch (event.code) {
-                case 'ArrowUp':
-                case 'KeyW':
-                    this.moveForward = false;
-                    break;
-                case 'ArrowLeft':
-                case 'KeyA':
-                    this.moveLeft = false;
-                    break;
-                case 'ArrowDown':
-                case 'KeyS':
-                    this.moveBackward = false;
-                    break;
-                case 'ArrowRight':
-                case 'KeyD':
-                    this.moveRight = false;
-                    break;
-                case 'KeyE':
-                    this.interactPressed = false;
-                    break;
-            }
+            this.keys[event.code] = false;
         };
 
-        document.addEventListener('keydown', onKeyDown);
-        document.addEventListener('keyup', onKeyUp);
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keyup', onKeyUp);
 
         // Handle touch controls later if needed, but for Ragebait 3D fps, cursor lock is king.
     },
 
     lock: function () {
-        if (this.controls) this.controls.lock();
+        console.log("Attempting to lock pointer...");
+        try {
+            if (this.controls) this.controls.lock();
+        } catch (e) {
+            console.warn("Pointer Lock failed:", e);
+        }
     },
 
     unlock: function () {
-        if (this.controls) this.controls.unlock();
+        try {
+            if (this.controls) this.controls.unlock();
+            setTimeout(() => {
+                document.exitPointerLock();
+            }, 100);
+        } catch (e) {
+            console.error("Unlock error:", e);
+        }
     }
 };

@@ -78,7 +78,7 @@ export const EventsSys = {
 
     playBSODEvent: function () {
         AudioSys.createNoiseBurst(0.1, 0.3, 100);
-        InputSys.unlock(); // force unlock to really mess with them
+        // Removed InputSys.unlock() to fix "WASD stopped working" bug
         HackingEffects.triggerBSOD(2500);
 
         setTimeout(() => {
