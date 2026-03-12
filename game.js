@@ -30,13 +30,12 @@ export const Game = {
     },
 
     start: async function (startingLevel = 1) {
-        console.log("GAME: Starting initialization...");
-        InputSys.suppressInstructions = false;
         try {
+            console.log("GAME: Step 1 - Engine3D.init()...");
             Engine3D.init();
 
             // Phase 2.0 Textures - with timeout and error protection
-            console.log("GAME: Preloading textures...");
+            console.log("GAME: Step 2 - Preloading textures...");
             const texPromise = Promise.all([
                 Engine3D.loadTexture('floor', './assets/tex_wood_floor_1773142823871.png'),
                 Engine3D.loadTexture('wall', './assets/tex_dirty_wall_1773142848053.png'),
@@ -51,23 +50,33 @@ export const Game = {
                 }, 5000))
             ]);
 
-            World3D.init(1);
+            console.log("GAME: Step 3 - World3D.init()...");
+            World3D.init(startingLevel);
+
+            console.log("GAME: Step 4 - InputSys.init()...");
             InputSys.init();
+
+            console.log("GAME: Step 5 - HackingEffects.init()...");
             HackingEffects.init();
 
             this.initLevel(startingLevel);
 
-            console.log("GAME: Initializing audio...");
-            await AudioSys.init();
+            console.log("GAME: Step 6 - AudioSys.init()...");
+            await Promise.race([
+                AudioSys.init(),
+                new Promise(r => setTimeout(r, 5000))
+            ]);
             AudioSys.startAmbient();
             AudioSys.startHeartbeatLoop(1500);
 
+            console.log("GAME: Step 7 - setupMicrophoneListener()...");
             this.setupMicrophoneListener();
 
             this.startTime = Date.now();
             this.state = 'play';
             this.lastTime = performance.now();
 
+            console.log("GAME: Step 8 - Starting animation loop...");
             Engine3D.renderer.setAnimationLoop(() => this.loop());
 
             document.addEventListener('click', () => {
@@ -89,29 +98,31 @@ export const Game = {
 
         } catch (e) {
             console.error("GAME START CRITICAL ERROR:", e.stack || e);
+            alert("Game failed to start. See console for details.");
         }
     },
 
     initLevel: function (num) {
-        this.level = num;
+        const levelNum = num || 1;
+        this.level = levelNum;
         this.saveProgress();
         this.survivalTimer = 0;
-        this.survivalGoal = 60 + (num - 1) * 60; // 1 min, 2 min, 3 min...
+        this.survivalGoal = 60 + (levelNum - 1) * 60; // 1 min, 2 min, 3 min...
         this.hasLifeline = false;
 
         Fragments.reset();
 
         // Dynamic World Scaling
-        World3D.init(num);
+        World3D.init(levelNum);
         Ghoul.init();
 
         Player.init(100, 100);
 
         // Ghoul gets more aggressive: base speed starts at ~93% of player (800)
-        Ghoul.baseSpeed = 750 + (num * 20);
+        Ghoul.baseSpeed = 750 + (levelNum * 20);
 
         // Spawn Ghoul much further away to prevent instant death given high speed
-        if (num === 1) {
+        if (levelNum === 1) {
             Ghoul.pos.set(1200, 0, 0); // Further down the hallway
         } else {
             // Distance increased to 1500 to ensure visibility/chase in Level 2 fog
@@ -136,7 +147,7 @@ export const Game = {
         this.peaceWindow = 5.0;
 
         HackingEffects.triggerFakeNotification(
-            `LEVEL ${num}`,
+            `LEVEL ${levelNum}`,
             `SURVIVE FOR ${this.survivalGoal / 60} MINUTE(S).`
         );
     },

@@ -18,7 +18,8 @@ export const Player = {
     },
 
     update: function (dt) {
-        if (!InputSys.controls || !InputSys.controls.isLocked) return;
+        const isMobile = InputSys.isMobile;
+        if (!InputSys.controls || (!InputSys.controls.isLocked && !isMobile)) return;
 
         const camera = Engine3D.camera;
         const velocity = InputSys.velocity;
@@ -42,10 +43,18 @@ export const Player = {
         const moveForce = 8000.0; // Sharp acceleration
         const inputDir = new THREE.Vector3();
 
-        if (InputSys.keys['KeyW'] || InputSys.keys['ArrowUp']) inputDir.add(forward);
-        if (InputSys.keys['KeyS'] || InputSys.keys['ArrowDown']) inputDir.sub(forward);
-        if (InputSys.keys['KeyD'] || InputSys.keys['ArrowRight']) inputDir.add(right);
-        if (InputSys.keys['KeyA'] || InputSys.keys['ArrowLeft']) inputDir.sub(right);
+        if (InputSys.keys['KeyW'] || InputSys.keys['ArrowUp'] || InputSys.joystickVector.y > 0.1) {
+            inputDir.add(forward.clone().multiplyScalar(Math.max(1, InputSys.joystickVector.y || 0)));
+        }
+        if (InputSys.keys['KeyS'] || InputSys.keys['ArrowDown'] || InputSys.joystickVector.y < -0.1) {
+            inputDir.sub(forward.clone().multiplyScalar(Math.max(1, -InputSys.joystickVector.y || 0)));
+        }
+        if (InputSys.keys['KeyD'] || InputSys.keys['ArrowRight'] || InputSys.joystickVector.x > 0.1) {
+            inputDir.add(right.clone().multiplyScalar(Math.max(1, InputSys.joystickVector.x || 0)));
+        }
+        if (InputSys.keys['KeyA'] || InputSys.keys['ArrowLeft'] || InputSys.joystickVector.x < -0.1) {
+            inputDir.sub(right.clone().multiplyScalar(Math.max(1, -InputSys.joystickVector.x || 0)));
+        }
 
         if (inputDir.lengthSq() > 0) {
             inputDir.normalize();
@@ -84,6 +93,15 @@ export const Player = {
             camera.position.y = 50;
         }
 
+        // 6. Look Behind (Q)
+        if (InputSys.keys['KeyQ'] && !this.qPressed) {
+            this.qPressed = true;
+            camera.rotation.y += Math.PI;
+        } else if (!InputSys.keys['KeyQ']) {
+            this.qPressed = false;
+        }
+
         return { x: camera.position.x, y: camera.position.y, z: camera.position.z };
-    }
+    },
+    qPressed: false
 };

@@ -5,6 +5,7 @@ window.onerror = function (msg, url, line) {
 
 import { Game } from './game.js';
 import { AudioSys } from './audio.js';
+import { InputSys } from './input.js';
 
 console.log("MAIN.JS: Imports completed.");
 
@@ -35,13 +36,14 @@ document.addEventListener('DOMContentLoaded', () => {
     async function requestFullScreen() {
         try {
             const elem = document.documentElement;
-            if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement && !document.msFullscreenElement) {
-                if (elem.requestFullscreen) await elem.requestFullscreen();
-                else if (elem.webkitRequestFullscreen) await elem.webkitRequestFullscreen();
-                else if (elem.mozRequestFullScreen) await elem.mozRequestFullScreen();
-                else if (elem.msRequestFullscreen) await elem.msRequestFullscreen();
+            const request = elem.requestFullscreen || elem.webkitRequestFullscreen || elem.mozRequestFullScreen || elem.msRequestFullscreen;
+            if (request) {
+                await request.call(elem);
             }
-        } catch (err) { console.error("FS Error:", err); }
+        } catch (err) {
+            console.error("FS Error:", err);
+            // Fallback for Safari/iOS which often requires specific interaction
+        }
     }
 
     async function toggleFullScreen() {
@@ -158,49 +160,108 @@ document.addEventListener('DOMContentLoaded', () => {
     }, true);
 
     async function playIntroSequence(isContinue = false) {
-        // PRELOAD GAME WHILE TYPING
-        const gameStartPromise = isContinue ? Promise.resolve() : Game.start(1);
+        try {
+            // PRELOAD GAME WHILE TYPING
+            // If it takes more than 10s, we proceed anyway
+            const gameStartPromise = isContinue ? Promise.resolve() : Game.start(1);
 
-        const typeText = async (text, delay = 30) => {
-            const line = document.createElement('div');
-            line.style.marginBottom = "5px";
-            introText.appendChild(line);
-            for (let i = 0; i < text.length; i++) {
-                line.textContent += text.charAt(i);
-                await new Promise(r => setTimeout(r, delay));
+            const gameWaitTimeout = new Promise(r => setTimeout(r, 10000));
+            const safeGameStart = Promise.race([gameStartPromise, gameWaitTimeout]);
+
+            if (InputSys.isMobile) {
+                const mc = document.getElementById('mobileControls');
+                if (mc) mc.classList.remove('hidden');
             }
-        };
-        const pause = (ms) => new Promise(r => setTimeout(r, ms));
 
-        introText.innerHTML = "";
-        introText.classList.add('blink-caret');
+            const typeText = async (text, delay = 25) => {
+                const line = document.createElement('div');
+                line.style.marginBottom = "5px";
+                introText.appendChild(line);
+                for (let i = 0; i < text.length; i++) {
+                    line.textContent += text.charAt(i);
+                    await new Promise(r => setTimeout(r, delay));
+                }
+            };
+            const pause = (ms) => new Promise(r => setTimeout(r, ms));
 
-        await typeText("System initialization... [STABLE]");
-        await pause(400);
-        await typeText("Analyzing sensory input... [OK]");
-        await pause(400);
-        await typeText("EXPERIMENT PROTOCOL 7: STARTING");
-        await pause(200); // IMMERSE IMMEDIATELY
+            introText.innerHTML = "";
+            introText.classList.add('blink-caret');
 
-        // SUDDEN JUMPSCARE (Screamer)
-        console.log("TRIGGERING SUDDEN JUMPSCARE");
-        const js = document.getElementById('jumpscareScreen');
-        js.classList.remove('hidden');
-        js.classList.add('active');
-        AudioSys.playJumpscare();
+            await typeText("System initialization... [STABLE]");
+            await pause(300);
+            await typeText("Analyzing sensory input... [OK]");
+            await pause(300);
+            await typeText("EXPERIMENT PROTOCOL 7: STARTING");
+            await pause(200);
 
-        await pause(1000);
+            // SUDDEN JUMPSCARE (Screamer)
+            const js = document.getElementById('jumpscareScreen');
+            if (js) {
+                js.classList.remove('hidden');
+                js.classList.add('active');
+            }
+            AudioSys.playJumpscare();
 
-        js.classList.remove('active');
-        js.classList.add('hidden');
+            await pause(1000);
 
-        // WAIT FOR GAME LOAD
-        await gameStartPromise;
+            if (js) {
+                js.classList.remove('active');
+                js.classList.add('hidden');
+                js.style.display = 'none'; // Nuclear option
+            }
 
-        introScreen.classList.remove('active');
-        introScreen.classList.add('hidden');
-        gameUI.classList.remove('hidden');
-        gameUI.classList.add('active');
+            // WAIT FOR GAME LOAD (Safe)
+            await safeGameStart;
+
+            // ENSURE EVERYTHING IS HIDDEN
+            introScreen.classList.remove('active');
+            introScreen.classList.add('hidden');
+            introScreen.style.display = 'none';
+
+            gameUI.classList.remove('hidden');
+            gameUI.classList.add('active');
+            gameUI.style.display = 'block';
+
+            // Start 3D rendering loop if not already
+            import('./engine3d.js').then(m => {
+                if (m.Engine3D.renderer && m.Engine3D.scene && m.Engine3D.camera) {
+                    m.Engine3D.render();
+                }
+            });
+
+            // Wire up mobile buttons
+            const btnInteract = document.getElementById('btnInteract');
+            const btnLookBehind = document.getElementById('btnLookBehind');
+
+            if (btnInteract) {
+                btnInteract.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    InputSys.keys['KeyE'] = true;
+                });
+                btnInteract.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    InputSys.keys['KeyE'] = false;
+                });
+            }
+
+            if (btnLookBehind) {
+                btnLookBehind.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    InputSys.keys['KeyQ'] = true;
+                });
+                btnLookBehind.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    InputSys.keys['KeyQ'] = false;
+                });
+            }
+        } catch (e) {
+            console.error("Intro Sequence Error:", e);
+            // Emergency Recovery: Show game anyway
+            introScreen.style.display = 'none';
+            document.getElementById('jumpscareScreen').style.display = 'none';
+            gameUI.classList.remove('hidden');
+            gameUI.classList.add('active');
+        }
     }
 
     btnReplay.addEventListener('click', () => { window.location.reload(); });
