@@ -20,16 +20,16 @@ export const AudioSys = {
 
             // Load user-provided scary sounds
             const soundPromises = [
-                this.loadSound('scream', 'scarysounds/ghost-screaming.mp3'),
-                this.loadSound('creature', 'scarysounds/creepy-little-creature.mp3'),
-                this.loadSound('iseeyou', 'scarysounds/iSeeYou.mp3'),
-                this.loadSound('ambience', 'scarysounds/backgroundambience.mp3'),
-                this.loadSound('gasp', 'scarysounds/surprise-gasp-female.mp3'),
-                this.loadSound('creak', 'scarysounds/floorcreak.mp3'),
-                this.loadSound('breathing', 'scarysounds/ghostbreathing.mp3'),
-                this.loadSound('teeth', 'scarysounds/ghostteethvibratingsound.mp3'),
-                this.loadSound('footsteps', 'scarysounds/scaryfootsteps.mp3'),
-                this.loadSound('growl', 'scarysounds/soft-evil-growl.mp3')
+                this.loadSound('scream', '/scarysounds/ghost-screaming.mp3'),
+                this.loadSound('creature', '/scarysounds/creepy-little-creature.mp3'),
+                this.loadSound('iseeyou', '/scarysounds/iSeeYou.mp3'),
+                this.loadSound('ambience', '/scarysounds/backgroundambience.mp3'),
+                this.loadSound('gasp', '/scarysounds/surprise-gasp-female.mp3'),
+                this.loadSound('creak', '/scarysounds/floorcreak.mp3'),
+                this.loadSound('breathing', '/scarysounds/ghostbreathing.mp3'),
+                this.loadSound('teeth', '/scarysounds/ghostteethvibratingsound.mp3'),
+                this.loadSound('footsteps', '/scarysounds/scaryfootsteps.mp3'),
+                this.loadSound('growl', '/scarysounds/soft-evil-growl.mp3')
             ];
 
             // return a promise that resolves when sounds are loaded (or timeout)
