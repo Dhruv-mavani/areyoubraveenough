@@ -209,13 +209,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const time = document.getElementById('statTime').innerText;
         const levelText = document.getElementById('statRooms').innerText;
         const rating = document.getElementById('statRating').innerText;
-        const text = `I survived for ${time} reaching ${levelText} with status "${rating}" in ARE YOU BRAVE ENOUGH. Challenge your fears here:`;
-        if (navigator.share) {
-            navigator.share({ title: 'ARE YOU BRAVE ENOUGH', text: text, url: window.location.href }).catch(console.error);
-        } else {
-            navigator.clipboard.writeText(text + " " + window.location.href);
-            btnShare.innerText = "COPIED TO CLIPBOARD!";
-            setTimeout(() => btnShare.innerText = "SHARE RESULT", 2000);
-        }
+        const text = `I survived for ${time} reaching ${levelText} with status "${rating}" in ARE YOU BRAVE ENOUGH. Challenge your fears here: ${window.location.href}`;
+        const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+        window.open(whatsappUrl, '_blank');
     });
 });
