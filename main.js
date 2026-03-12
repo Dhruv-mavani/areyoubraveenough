@@ -209,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const time = document.getElementById('statTime').innerText;
         const levelText = document.getElementById('statRooms').innerText;
         const rating = document.getElementById('statRating').innerText;
-        const text = `I survived for ${time} reaching ${levelText} with status "${rating}" in ARE YOU BRAVE ENOUGH. Challenge your fears here: ${window.location.href}`;
+        const text = `💀 ARE YOU BRAVE ENOUGH? 💀\n\nI survived the experiment for Time:${time} and reached ${levelText}!\nFinal Status: ${rating}\n\nCan you face the darkness? Challenge your fears here: ${window.location.href}`;
         const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
         window.open(whatsappUrl, '_blank');
     });

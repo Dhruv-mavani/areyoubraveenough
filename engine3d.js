@@ -25,12 +25,22 @@ export const Engine3D = {
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         this.camera.position.set(0, 50, 0); // Average eye height
 
-        // Renderer
-        this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        // Renderer Optimization for Mobile
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        this.renderer = new THREE.WebGLRenderer({
+            antialias: !isMobile, // Disable AA on mobile for performance
+            precision: isMobile ? 'mediump' : 'highp' // Lower precision on mobile
+        });
+
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
+
+        // Cap pixel ratio on mobile to prevent sub-pixel rendering overkill
+        const maxPixelRatio = isMobile ? 2.0 : window.devicePixelRatio;
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxPixelRatio));
+
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.shadowMap.type = isMobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
         this.renderer.toneMapping = THREE.ReinhardToneMapping;
         this.renderer.toneMappingExposure = 1.0;
 
