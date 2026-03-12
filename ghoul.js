@@ -38,7 +38,7 @@ export const Ghoul = {
 
         // Load the terrifying face texture
         const loader = new THREE.TextureLoader();
-        loader.load('./assets/tex_ghoul_face.png', (tex) => {
+        loader.load('/assets/tex_ghoul_face.png', (tex) => {
             this.faceMaterial.map = tex;
             this.faceMaterial.needsUpdate = true;
         });
